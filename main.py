@@ -7,6 +7,7 @@ from ig import login_instagram, like_and_comment
 from openai_client import set_api_key, generate_comment
 from db import init_db, get_stats, log_action
 from stats import create_stats_window
+import threading
 
 CONFIG_FILE = "config.json"
 
@@ -194,7 +195,7 @@ class InstaBotApp:
 
     # --- Button creation helpers ---
     def create_modern_hashtag_section(self, parent, start_row):
-        """Create a modern Instagram-like hashtag management section with scrollable display"""
+        """Create a modern Instagram-like hashtag management section"""
         # Section title
         hashtag_label = ttk.Label(
             parent, 
@@ -250,48 +251,9 @@ class InstaBotApp:
         )
         clear_btn.pack(side=tk.RIGHT)
         
-        # --- Scrollable hashtag display ---
-        display_container = tk.Frame(parent, bg=self.SECONDARY_BG)
-        display_container.grid(row=start_row+1, column=0, columnspan=2, sticky="ew", pady=(8, 0))
-        display_container.grid_propagate(False)
-        display_container.configure(height=180)  # Fixed height for scroll area
-        
-        # Canvas for scrolling
-        self.hashtag_canvas = tk.Canvas(
-            display_container,
-            bg=self.SECONDARY_BG,
-            highlightthickness=0,
-            bd=0,
-            relief="flat"
-        )
-        self.hashtag_canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
-        
-        # Scrollbar
-        self.hashtag_scrollbar = tk.Scrollbar(
-            display_container,
-            orient="vertical",
-            command=self.hashtag_canvas.yview
-        )
-        self.hashtag_scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
-        self.hashtag_canvas.configure(yscrollcommand=self.hashtag_scrollbar.set)
-        
-        # Frame inside canvas
-        self.hashtag_display_frame = tk.Frame(self.hashtag_canvas, bg=self.SECONDARY_BG)
-        self.hashtag_window = self.hashtag_canvas.create_window((0, 0), window=self.hashtag_display_frame, anchor="nw")
-        
-        # Configure scrolling
-        def on_frame_configure(event):
-            self.hashtag_canvas.configure(scrollregion=self.hashtag_canvas.bbox("all"))
-        self.hashtag_display_frame.bind("<Configure>", on_frame_configure)
-        
-        def on_canvas_configure(event):
-            self.hashtag_canvas.itemconfig(self.hashtag_window, width=event.width)
-        self.hashtag_canvas.bind("<Configure>", on_canvas_configure)
-        
-        # Optional: Mousewheel scrolling
-        def _on_mousewheel(event):
-            self.hashtag_canvas.yview_scroll(int(-1*(event.delta/120)), "units")
-        self.hashtag_canvas.bind_all("<MouseWheel>", _on_mousewheel)
+        # Container for hashtag display
+        self.hashtag_display_frame = tk.Frame(parent, bg=self.SECONDARY_BG)
+        self.hashtag_display_frame.grid(row=start_row+1, column=0, columnspan=2, sticky="ew", pady=(8, 0))
         
     def add_button_hover_effects(self, add_btn, clear_btn):
         """Add modern hover effects to buttons"""
@@ -632,11 +594,11 @@ class InstaBotApp:
         pass
         
     def update_hashtag_display(self):
-        """Update the display of hashtags with modern Instagram-like design (now scrollable)"""
+        """Update the display of hashtags with modern Instagram-like design"""
         # Clear existing widgets
         for widget in self.hashtag_display_frame.winfo_children():
             widget.destroy()
-        
+            
         if not self.hashtags_list:
             # Show elegant placeholder
             placeholder_frame = tk.Frame(self.hashtag_display_frame, bg=self.SECONDARY_BG)
@@ -652,9 +614,10 @@ class InstaBotApp:
             )
             placeholder.pack()
             return
-        
+            
         # Responsive hashtag container using grid
-        hashtag_container = self.hashtag_display_frame
+        hashtag_container = tk.Frame(self.hashtag_display_frame, bg=self.SECONDARY_BG)
+        hashtag_container.pack(fill=tk.BOTH, expand=True, pady=(16, 8))
         max_cols = 3  # Number of pills per row before wrapping
         for i, hashtag in enumerate(self.hashtags_list):
             pill_frame = tk.Frame(
@@ -704,7 +667,7 @@ class InstaBotApp:
             create_hover_effects(pill_frame, hashtag_label, remove_btn, hashtag)
         
     def create_status_bar(self):
-        """Create a modern Instagram-like status bar with a status dot"""
+        """Create a modern Instagram-like status bar"""
         # Top border
         border_frame = tk.Frame(self.root, bg=self.BORDER_COLOR, height=1)
         border_frame.pack(fill=tk.X, side=tk.BOTTOM)
@@ -712,16 +675,6 @@ class InstaBotApp:
         # Status bar container
         status_bar = tk.Frame(self.root, bg=self.PRIMARY_BG, padx=30, pady=12)
         status_bar.pack(fill=tk.X, side=tk.BOTTOM)
-        
-        # Status dot (default: gray)
-        self.status_dot = tk.Label(
-            status_bar,
-            text="●",
-            fg="#a1a6b2",  # gray
-            bg=self.PRIMARY_BG,
-            font=("SF Pro Display", 16, "bold") if self.is_macos() else ("Segoe UI", 13, "bold")
-        )
-        self.status_dot.pack(side=tk.LEFT, padx=(0, 8))
         
         # Status message on the left with better contrast
         status_label = tk.Label(
@@ -766,16 +719,7 @@ class InstaBotApp:
             font=("SF Pro Text", 12) if self.is_macos() else ("Segoe UI", 11)
         )
         time_label.pack(side=tk.RIGHT)
-
-    def set_status_dot(self, color):
-        """Set the color of the status dot. Accepts 'green', 'gray', 'red' or hex."""
-        color_map = {
-            'green': '#1ecb7a',
-            'gray': '#a1a6b2',
-            'red': '#ff4f4f'
-        }
-        self.status_dot.configure(fg=color_map.get(color, color))
-
+    
     def load_config_to_ui(self):
         """Load configuration to UI with error handling"""
         try:
@@ -832,8 +776,7 @@ class InstaBotApp:
             if not self.hashtags_list:
                 messagebox.showerror("Error", "Please add at least one hashtag before running the bot!")
                 return
-            # Set status dot to green (running)
-            self.set_status_dot('green')
+                
             # Get current config
             cfg = {
                 "instagram_username": self.username_var.get(),
@@ -844,34 +787,49 @@ class InstaBotApp:
                 "comments_per_day": int(self.comments_var.get()),
                 "allow_sensitive": self.allow_sensitive_var.get()
             }
+            
             # Save before running
             self.save_config(cfg)
+            
             # Setup OpenAI
             set_api_key(cfg['openai_api_key'])
+            
             # Update status
             self.status_var.set("Logging in to Instagram...")
             self.root.update()
+            
             # Login to Instagram
             cl = login_instagram(cfg['instagram_username'], cfg['instagram_password'])
+            
             # Update status
             self.status_var.set("Running bot actions...")
             self.root.update()
-            # Run the bot
-            like_and_comment(
-                cl,
-                cfg['hashtags'],
-                cfg['likes_per_day'],
-                cfg['comments_per_day'],
-                generate_comment,
-                allow_sensitive=cfg['allow_sensitive']
-            )
-            # Update status
-            self.status_var.set("Completed! Check logs for details.")
-            self.set_status_dot('gray')  # Back to idle
-            messagebox.showinfo("Success", "Bot actions completed successfully!")
+            
+            # Run the bot in a background thread
+            def bot_task():
+                try:
+                    # Run the bot
+                    like_and_comment(
+                        cl,
+                        cfg['hashtags'],
+                        cfg['likes_per_day'],
+                        cfg['comments_per_day'],
+                        generate_comment,
+                        allow_sensitive=cfg['allow_sensitive']
+                    )
+                    
+                    # Update status
+                    self.root.after(0, lambda: self.status_var.set("Completed! Check logs for details."))
+                    messagebox.showinfo("Success", "Bot actions completed successfully!")
+                    
+                except Exception as e:
+                    self.root.after(0, lambda: self.status_var.set(f"Error: {str(e)}"))
+                    messagebox.showerror("Error", str(e))
+            
+            threading.Thread(target=bot_task, daemon=True).start()
+            
         except Exception as e:
             self.status_var.set(f"Error: {str(e)}")
-            self.set_status_dot('red')
             messagebox.showerror("Error", str(e))
             
     def show_stats(self):

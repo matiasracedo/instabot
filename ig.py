@@ -33,14 +33,28 @@ def has_action(media_id, action_type):
 
 def get_media_details(cl, media):
     # Fetch extra details for personalization
-    user = cl.user_info_by_id(media.user.pk)
+    user = cl.user_info(media.user.pk)
+    # Determine if this is the user's own post
+    is_own_post = False
+    is_following = False
+    try:
+        # cl.user_id is the logged-in user's id
+        is_own_post = (media.user.pk == cl.user_id)
+        # Check if the logged-in user is following the post's author
+        # cl.user_following returns a dict of user_id: UserShort
+        following_dict = cl.user_following(cl.user_id)
+        is_following = str(media.user.pk) in [str(uid) for uid in following_dict.keys()]
+    except Exception:
+        pass
     details = {
         'username': user.username,
         'full_name': user.full_name,
         'caption': media.caption_text or "",
         'like_count': getattr(media, 'like_count', None),
         'comment_count': getattr(media, 'comment_count', None),
-        'media_url': media.thumbnail_url if hasattr(media, 'thumbnail_url') else None
+        'media_url': media.thumbnail_url if hasattr(media, 'thumbnail_url') else None,
+        'is_own_post': is_own_post,
+        'is_following': is_following
     }
     return details
 

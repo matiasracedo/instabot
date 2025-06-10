@@ -1,23 +1,44 @@
 import openai
 import base64
+from langdetect import detect
+import random
 
 def set_api_key(api_key):
     openai.api_key = api_key
 
 def generate_comment(details, allow_sensitive=True):
+    # Do not comment on own posts
+    if details.get('is_own_post'):
+        return None
+    caption = details['caption']
+    try:
+        language_code = detect(caption)
+    except Exception:
+        language_code = 'en'  # fallback
+    # Alternate word limit between 10 and 20
+    word_limit = random.choice([10, 20])
     prompt = (
         f"Generate a thoughtful Instagram comment for this post.\n"
-        f"Caption: '{details['caption']}'\n"
+        f"Caption: '{caption}'\n"
         f"Posted by: {details['username']} ({details['full_name']})\n"
         f"Likes: {details.get('like_count', 'N/A')} | Comments: {details.get('comment_count', 'N/A')}\n"
     )
+    # Add language and tone instructions
+    if language_code == 'es':
+        prompt += ("Reply in Argentinian Spanish, making sure the comment sounds like a native Argentinian speaker. ")
+    else:
+        prompt += ("Reply in English, regardless of the caption's language. ")
+    # Tone based on following status
+    if details.get('is_following'):
+        prompt += ("Make the comment warm, friendly, and supportive, as if you know the person. ")
+    else:
+        prompt += ("Make the comment polite, positive, and not too familiar, as if you don't know the person. ")
+    prompt += (f"The comment must be short (between 10 and {word_limit} words), and should never start with quote marks or quotation marks unless it is intentional.\n")
     image_analysis = None
     sensitive = False
     if details.get('image_path'):
-        # Read image and send to OpenAI for vision analysis
         with open(details['image_path'], 'rb') as img_file:
             img_bytes = img_file.read()
-        # GPT-4o vision API expects image as base64 or file, here we use base64
         img_b64 = base64.b64encode(img_bytes).decode('utf-8')
         vision_prompt = (
             "Analyze this Instagram image. "
@@ -25,7 +46,7 @@ def generate_comment(details, allow_sensitive=True):
             "Reply with 'safe' if the image is safe, or 'sensitive' if it is not. "
             "Then, provide a short description of the image."
         )
-        vision_response = openai.ChatCompletion.create(
+        vision_response = openai.chat.completions.create(
             model="gpt-4o",
             messages=[
                 {"role": "user", "content": vision_prompt},
@@ -35,20 +56,18 @@ def generate_comment(details, allow_sensitive=True):
             temperature=0.2,
         )
         vision_content = vision_response.choices[0].message.content.strip()
-        # Parse for 'safe' or 'sensitive'
         if vision_content.lower().startswith('sensitive'):
             sensitive = True
-        # Extract description after first line
         image_analysis = '\n'.join(vision_content.split('\n')[1:]).strip()
     if sensitive and not allow_sensitive:
         return None  # Signal to skip commenting
     if image_analysis:
         prompt += f"Image description: {image_analysis}\n"
     prompt += "Comment:"
-    response = openai.ChatCompletion.create(
+    response = openai.chat.completions.create(
         model="gpt-4o",
         messages=[{"role": "user", "content": prompt}],
-        max_tokens=40,
+        max_tokens=60,
         temperature=0.7,
     )
     return response.choices[0].message.content.strip()
