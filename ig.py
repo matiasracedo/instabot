@@ -74,8 +74,9 @@ def download_image(url, media_id):
         logging.error(f"Failed to download image for {media_id}: {e}")
     return None
 
-def like_and_comment(cl, hashtags, like_limit, comment_limit, openai_comment_fn, allow_sensitive=True):
+def like_and_comment(cl, hashtags, like_limit, comment_limit, openai_comment_fn, allow_sensitive=True, avoid_hashtags=None):
     liked, commented = 0, 0
+    avoid_hashtags = [h.lower() for h in (avoid_hashtags or [])]
     for hashtag in hashtags:
         medias = cl.hashtag_medias_recent(hashtag.strip(), amount=10)
         for media in medias:
@@ -84,12 +85,11 @@ def like_and_comment(cl, hashtags, like_limit, comment_limit, openai_comment_fn,
             details['image_path'] = img_path
             post_link = f"https://www.instagram.com/p/{media.code}/"
             details['post_link'] = post_link
-            # --- Avoid commenting on giveaways ---
             caption = (details.get('caption') or '').lower()
             media_hashtags = [h.lower() for h in getattr(media, 'hashtags', [])]
+            # --- Avoid commenting on giveaways ---
             if 'giveaway' in caption or any('giveaway' in h for h in media_hashtags) or 'giveaway' in hashtag.lower():
                 logging.info(f"Skipped post {media.id} due to 'giveaway' in caption or hashtags. | Link: {post_link}")
-                # Still allow like, but skip comment
                 if liked < like_limit and not has_action(media.id, 'like'):
                     try:
                         cl.media_like(media.id)
@@ -100,7 +100,25 @@ def like_and_comment(cl, hashtags, like_limit, comment_limit, openai_comment_fn,
                         logging.error(f"Failed to like post {media.id}: {e}")
                         log_action('error', media_id=media.id, hashtag=hashtag, error=str(e), post_link=post_link)
                     time.sleep(random.randint(20, 60))
-                # Clean up image
+                if img_path and os.path.exists(img_path):
+                    try:
+                        os.remove(img_path)
+                    except Exception as e:
+                        logging.warning(f"Could not delete image {img_path}: {e}")
+                continue
+            # --- Avoid commenting if avoid hashtag present ---
+            if any(h in media_hashtags for h in avoid_hashtags):
+                logging.info(f"Skipped commenting on post {media.id} due to avoid hashtag in hashtags. | Link: {post_link}")
+                if liked < like_limit and not has_action(media.id, 'like'):
+                    try:
+                        cl.media_like(media.id)
+                        logging.info(f"Liked post {media.id} (hashtag: {hashtag}) | Link: {post_link}")
+                        log_action('like', media_id=media.id, hashtag=hashtag, post_link=post_link)
+                        liked += 1
+                    except Exception as e:
+                        logging.error(f"Failed to like post {media.id}: {e}")
+                        log_action('error', media_id=media.id, hashtag=hashtag, error=str(e), post_link=post_link)
+                    time.sleep(random.randint(20, 60))
                 if img_path and os.path.exists(img_path):
                     try:
                         os.remove(img_path)
@@ -131,7 +149,6 @@ def like_and_comment(cl, hashtags, like_limit, comment_limit, openai_comment_fn,
                     logging.error(f"Failed to comment on post {media.id}: {e}")
                     log_action('error', media_id=media.id, hashtag=hashtag, error=str(e), post_link=post_link)
                 time.sleep(random.randint(40, 90))
-            # Delete the image after analysis
             if img_path and os.path.exists(img_path):
                 try:
                     os.remove(img_path)

@@ -50,7 +50,7 @@ def generate_comment(details, allow_sensitive=True):
             model="gpt-4o",
             messages=[
                 {"role": "user", "content": vision_prompt},
-                {"role": "user", "content": [{"type": "image_url", "image_url": f"data:image/jpeg;base64,{img_b64}"}]}
+                {"role": "user", "content": [{"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{img_b64}"}}]}
             ],
             max_tokens=100,
             temperature=0.2,

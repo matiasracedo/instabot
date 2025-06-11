@@ -22,6 +22,7 @@ A sophisticated Instagram automation tool with AI-powered comment generation and
 - **Flowing Layout**: Hashtags wrap naturally in a modern grid
 - **Hover Effects**: Smooth color transitions on interaction
 - **Bulk Actions**: Clear all hashtags with confirmation dialog
+- **Avoid Hashtags**: Add a separate list of hashtags to avoid when commenting (the bot will not comment on posts containing these hashtags, but will still like them)
 
 ### 🤖 **Smart Automation**
 - **Intelligent Liking**: Automatically like posts based on hashtags
@@ -76,7 +77,12 @@ A sophisticated Instagram automation tool with AI-powered comment generation and
    - Click "+ Add" or press Enter to add
    - Remove individual hashtags with ✕ button
 
-4. **Rate Limits**
+4. **Avoid Hashtags**
+   - Add hashtags to the "Avoid Hashtags" list
+   - If a post contains any of these, the bot will skip commenting (but may still like)
+   - Useful for avoiding giveaways, spam, or unwanted topics
+
+5. **Rate Limits**
    - Likes per day (default: 50)
    - Comments per day (default: 15)
    - Adjust based on your account age and activity
@@ -101,6 +107,7 @@ A sophisticated Instagram automation tool with AI-powered comment generation and
 - **Clearing**: Click "Clear All" to remove all hashtags
 - **Validation**: Automatic duplicate and format checking
 - **Visual Feedback**: Instagram-style pills with hover effects
+- **Avoid Hashtags**: Use the second list to add hashtags you want to avoid when commenting. Posts with these hashtags will not receive comments from the bot.
 
 ### Custom Interface Elements
 - **Modern Checkbox**: Custom-designed toggle with Instagram blue

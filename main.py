@@ -17,11 +17,7 @@ class InstaBotApp:
         self.root.title("InstaBot")
         self.root.configure(bg="#0d1117")  # GitHub dark background
         self.root.resizable(False, False)
-        
-        # Set window size for better layout
-        self.root.geometry("650x750")
-        
-        # Center the window on screen
+        self.root.geometry("1100x900")  # Increased size for two-column layout
         self.center_window()
         
         # Initialize database if needed
@@ -33,6 +29,9 @@ class InstaBotApp:
         self.openai_var = tk.StringVar()
         self.hashtag_input_var = tk.StringVar()  # For new hashtag input
         self.hashtags_list = []  # List to store hashtags
+        # --- Avoid hashtags ---
+        self.avoid_hashtag_input_var = tk.StringVar()  # For avoid hashtag input
+        self.avoid_hashtags_list = []  # List to store avoid hashtags
         self.likes_var = tk.StringVar(value="50")
         self.comments_var = tk.StringVar(value="15")
         self.allow_sensitive_var = tk.BooleanVar(value=True)
@@ -53,6 +52,8 @@ class InstaBotApp:
         # Update hashtag display after UI is created
         if hasattr(self, 'hashtag_display_frame'):
             self.update_hashtag_display()
+        if hasattr(self, 'avoid_hashtag_display_frame'):
+            self.update_avoid_hashtag_display()
         
         # Create status bar
         self.create_status_bar()
@@ -63,7 +64,7 @@ class InstaBotApp:
     def center_window(self):
         """Center the window on the screen"""
         self.root.update_idletasks()
-        width = 650
+        width = 1100
         height = 900
         x = (self.root.winfo_screenwidth() // 2) - (width // 2)
         y = (self.root.winfo_screenheight() // 2) - (height // 2) - 50  # Slightly higher
@@ -253,8 +254,53 @@ class InstaBotApp:
         
         # Container for hashtag display
         self.hashtag_display_frame = tk.Frame(parent, bg=self.SECONDARY_BG)
-        self.hashtag_display_frame.grid(row=start_row+1, column=0, columnspan=2, sticky="ew", pady=(8, 0))
+        self.hashtag_display_frame.grid(row=start_row+1, column=0, columnspan=2, sticky="ew", pady=(8, 24))  # Add more space below hashtags
         
+        # --- Avoid Hashtags Section ---
+        avoid_label = ttk.Label(
+            parent,
+            text="Avoid Hashtags (no comment if present)",
+            background=self.SECONDARY_BG
+        )
+        avoid_label.grid(row=start_row+2, column=0, sticky="w", pady=(0, 8), padx=(0, 15))  # Less top padding
+        avoid_input_container = tk.Frame(parent, bg=self.SECONDARY_BG)
+        avoid_input_container.grid(row=start_row+2, column=1, sticky="ew", pady=(0, 8))
+        self.avoid_hashtag_entry = tk.Entry(
+            avoid_input_container,
+            textvariable=self.avoid_hashtag_input_var,
+            bg=self.INPUT_BG,
+            fg=self.TEXT_COLOR,
+            insertbackground=self.TEXT_COLOR,
+            font=("SF Pro Display", 13) if self.is_macos() else ("Segoe UI", 11),
+            bd=1,
+            relief="solid",
+            highlightthickness=1,
+            highlightcolor=self.ACCENT_COLOR,
+            highlightbackground=self.BORDER_COLOR
+        )
+        self.avoid_hashtag_entry.pack(side=tk.LEFT, fill=tk.X, expand=True, ipady=8, ipadx=12)
+        self.avoid_hashtag_entry.bind('<Return>', lambda e: self.add_avoid_hashtag())
+        self.avoid_hashtag_entry.bind('<FocusIn>', self.on_avoid_entry_focus_in)
+        self.avoid_hashtag_entry.bind('<FocusOut>', self.on_avoid_entry_focus_out)
+        avoid_button_container = tk.Frame(avoid_input_container, bg=self.SECONDARY_BG)
+        avoid_button_container.pack(side=tk.RIGHT, padx=(10, 0))
+        avoid_add_btn = ttk.Button(
+            avoid_button_container,
+            text="Add",
+            command=self.add_avoid_hashtag,
+            style="Secondary.TButton"
+        )
+        avoid_add_btn.pack(side=tk.RIGHT, padx=(0, 8))
+        avoid_clear_btn = ttk.Button(
+            avoid_button_container,
+            text="Clear All",
+            command=self.clear_all_avoid_hashtags,
+            style="Secondary.TButton"
+        )
+        avoid_clear_btn.pack(side=tk.RIGHT)
+        self.avoid_hashtag_display_frame = tk.Frame(parent, bg=self.SECONDARY_BG)
+        self.avoid_hashtag_display_frame.grid(row=start_row+3, column=0, columnspan=2, sticky="ew", pady=(8, 24))  # More space below avoid hashtags
+
     def add_button_hover_effects(self, add_btn, clear_btn):
         """Add modern hover effects to buttons"""
         # Add button hover effects
@@ -282,6 +328,12 @@ class InstaBotApp:
     def on_entry_focus_out(self, event):
         """Handle entry focus out"""
         self.hashtag_entry.configure(highlightthickness=1)
+        
+    def on_avoid_entry_focus_in(self, event):
+        self.avoid_hashtag_entry.configure(highlightthickness=2)
+
+    def on_avoid_entry_focus_out(self, event):
+        self.avoid_hashtag_entry.configure(highlightthickness=1)
         
     def create_modern_checkbox(self, parent, row):
         """Create a modern Instagram-like checkbox"""
@@ -450,45 +502,55 @@ class InstaBotApp:
         separator.pack(fill=tk.X, pady=(10, 0))
             
     def create_content(self):
-        # Main container with padding
+        # Main container with extra vertical space
         main_container = tk.Frame(
             self.root,
             bg=self.PRIMARY_BG,
-            padx=30,
-            pady=20
+            padx=20,
+            pady=30
         )
         main_container.pack(fill=tk.BOTH, expand=True)
-        
-        # Create a card-like container for the form
+
+        # Card-like container for the form with drop shadow effect
         card_frame = tk.Frame(
             main_container,
             bg=self.SECONDARY_BG,
-            relief="flat",
-            bd=0
+            relief="ridge",
+            bd=4,
+            highlightbackground="#22242a",
+            highlightthickness=2
         )
-        card_frame.pack(fill=tk.BOTH, padx=20, pady=10)
-        
-        # Add subtle border effect
-        border_frame = tk.Frame(
-            card_frame,
-            bg=self.BORDER_COLOR,
-            height=1
-        )
-        border_frame.pack(fill=tk.X, side=tk.TOP)
-        
-        # Inner content with proper padding
+        card_frame.pack(fill=tk.BOTH, padx=30, pady=10, expand=True)
+
+        # --- Two-column layout ---
         content_frame = tk.Frame(
             card_frame,
             bg=self.SECONDARY_BG,
             padx=30,
-            pady=25
+            pady=30
         )
-        content_frame.pack(fill=tk.BOTH, expand=True)
-        
-        # Configure grid weights for responsive design
-        content_frame.grid_columnconfigure(1, weight=1)
-        
-        # Form fields with modern styling
+        content_frame.pack(fill=tk.BOTH, expand=True, pady=(0, 30))  # Add bottom padding for buttons
+        content_frame.grid_columnconfigure(0, weight=1, minsize=370)
+        content_frame.grid_columnconfigure(1, weight=1, minsize=420)
+        content_frame.grid_rowconfigure(0, weight=1)
+
+        # --- Left column: Account & Limits ---
+        left_col = tk.Frame(content_frame, bg=self.SECONDARY_BG)
+        left_col.grid(row=0, column=0, sticky="nsew", padx=(0, 32), pady=(0, 0))
+        left_col.grid_columnconfigure(0, weight=1)
+        left_col.grid_columnconfigure(1, weight=1)
+
+        # Section header
+        left_header = ttk.Label(
+            left_col,
+            text="Account & Limits",
+            font=("SF Pro Display", 18, "bold") if self.is_macos() else ("Segoe UI", 15, "bold"),
+            background=self.SECONDARY_BG,
+            foreground=self.ACCENT_COLOR,
+            padding=(0, 0, 0, 18)
+        )
+        left_header.grid(row=0, column=0, columnspan=2, sticky="w")
+
         fields = [
             ("Instagram Username", self.username_var, False),
             ("Instagram Password", self.password_var, True),
@@ -496,34 +558,85 @@ class InstaBotApp:
             ("Likes per day", self.likes_var, False),
             ("Comments per day", self.comments_var, False)
         ]
-        
         for i, (field_label, field_var, is_password) in enumerate(fields):
-            # Field label with modern styling
             label = ttk.Label(
-                content_frame, 
+                left_col,
                 text=field_label,
                 background=self.SECONDARY_BG
             )
-            label.grid(row=i, column=0, sticky="w", pady=(12, 4), padx=(0, 15))
-            
-            # Entry field with modern styling
+            label.grid(row=i+1, column=0, sticky="w", pady=(8, 4), padx=(0, 10))
             entry = ttk.Entry(
-                content_frame, 
+                left_col,
                 textvariable=field_var,
                 show="•" if is_password else None,
-                width=35,
+                width=28,
                 font=("SF Pro Display", 13) if self.is_macos() else ("Segoe UI", 11)
             )
-            entry.grid(row=i, column=1, pady=(12, 4), sticky="ew")
-        
-        # Custom hashtag section with modern design
-        self.create_modern_hashtag_section(content_frame, len(fields))
-        
+            entry.grid(row=i+1, column=1, pady=(8, 4), sticky="ew")
+
         # Modern checkbox for sensitive content
-        self.create_modern_checkbox(content_frame, len(fields) + 2)
-        
-        # Action buttons with modern styling
-        self.create_modern_buttons(content_frame, len(fields) + 3)
+        self.create_modern_checkbox(left_col, len(fields) + 2)
+
+        # --- Right column: Hashtags & Avoid Hashtags ---
+        right_col = tk.Frame(content_frame, bg=self.SECONDARY_BG)
+        right_col.grid(row=0, column=1, sticky="nsew", padx=(0, 0), pady=(0, 0))
+        right_col.grid_columnconfigure(0, weight=1)
+        right_col.grid_columnconfigure(1, weight=1)
+
+        # Section header
+        right_header = ttk.Label(
+            right_col,
+            text="Hashtags",
+            font=("SF Pro Display", 18, "bold") if self.is_macos() else ("Segoe UI", 15, "bold"),
+            background=self.SECONDARY_BG,
+            foreground=self.ACCENT_COLOR,
+            padding=(0, 0, 0, 18)
+        )
+        right_header.grid(row=0, column=0, columnspan=2, sticky="w")
+
+        # Hashtag and avoid hashtag sections
+        self.create_modern_hashtag_section(right_col, 1)
+
+        # --- Action buttons: centered below both columns ---
+        button_section = tk.Frame(card_frame, bg=self.SECONDARY_BG)
+        button_section.pack(pady=(0, 20))  # Add more bottom margin
+        # Center the buttons
+        save_btn = ttk.Button(
+            button_section,
+            text="Save Settings",
+            command=self.save_settings,
+            style="TButton"
+        )
+        save_btn.pack(side=tk.LEFT, padx=(0, 18), ipadx=10)
+        run_btn = ttk.Button(
+            button_section,
+            text="Run Bot",
+            command=self.start_bot,
+            style="TButton"
+        )
+        run_btn.pack(side=tk.LEFT, padx=(0, 18), ipadx=10)
+        stats_btn = ttk.Button(
+            button_section,
+            text="View Statistics",
+            command=self.show_stats,
+            style="Secondary.TButton"
+        )
+        stats_btn.pack(side=tk.LEFT, ipadx=10)
+
+        # --- Status bar remains at the bottom ---
+
+        # Adjust minsize for better macOS appearance
+        if self.is_macos():
+            left_col.grid_propagate(False)
+            right_col.grid_propagate(False)
+            left_col.config(width=370)
+            right_col.config(width=420)
+
+        # Update hashtag displays if frames exist
+        if hasattr(self, 'hashtag_display_frame'):
+            self.update_hashtag_display()
+        if hasattr(self, 'avoid_hashtag_display_frame'):
+            self.update_avoid_hashtag_display()
         
     def remove_hashtag(self, hashtag):
         """Remove a hashtag from the list"""
@@ -579,6 +692,52 @@ class InstaBotApp:
         self.update_status_bar()
         self.status_var.set(f"Added #{hashtag}")
         
+    def add_avoid_hashtag(self):
+        """Add a hashtag to the avoid list with modern validation"""
+        hashtag = self.avoid_hashtag_input_var.get().strip()
+        
+        # Remove # if user included it
+        if hashtag.startswith('#'):
+            hashtag = hashtag[1:]
+            
+        # Validate hashtag
+        if not hashtag:
+            self.status_var.set("Please enter a hashtag to avoid")
+            return
+            
+        # Check for invalid characters
+        if not hashtag.replace('_', '').isalnum():
+            self.show_modern_message("Invalid Hashtag", "Hashtags can only contain letters, numbers, and underscores!", "warning")
+            return
+            
+        if hashtag.lower() in [h.lower() for h in self.avoid_hashtags_list]:
+            self.show_modern_message("Duplicate", f"Avoid hashtag '{hashtag}' already exists!", "warning")
+            self.avoid_hashtag_input_var.set("")  # Clear input even on duplicate
+            return
+            
+        # Check maximum avoid hashtags (Instagram allows up to 30)
+        if len(self.avoid_hashtags_list) >= 30:
+            self.show_modern_message("Too Many Hashtags", "Maximum 30 avoid hashtags allowed!", "warning")
+            return
+            
+        # Add to list
+        self.avoid_hashtags_list.append(hashtag)
+        self.avoid_hashtag_input_var.set("")  # Clear input
+        self.update_avoid_hashtag_display()
+        self.status_var.set(f"Added avoid #{hashtag}")
+        
+    def clear_all_avoid_hashtags(self):
+        """Clear all avoid hashtags after confirmation"""
+        if not self.avoid_hashtags_list:
+            self.status_var.set("No avoid hashtags to clear")
+            return
+            
+        if messagebox.askyesno("Clear All Avoid Hashtags", 
+                              f"Are you sure you want to remove all {len(self.avoid_hashtags_list)} avoid hashtags?"):
+            self.avoid_hashtags_list.clear()
+            self.update_avoid_hashtag_display()
+            self.status_var.set("All avoid hashtags cleared")
+            
     def show_modern_message(self, title, message, msg_type="info"):
         """Show a modern message dialog"""
         if msg_type == "warning":
@@ -666,6 +825,86 @@ class InstaBotApp:
                     widget.bind("<Leave>", on_leave)
             create_hover_effects(pill_frame, hashtag_label, remove_btn, hashtag)
         
+    def update_avoid_hashtag_display(self):
+        """Update the display of avoid hashtags with modern Instagram-like design"""
+        # Clear existing widgets
+        for widget in self.avoid_hashtag_display_frame.winfo_children():
+            widget.destroy()
+            
+        if not self.avoid_hashtags_list:
+            # Show elegant placeholder
+            placeholder_frame = tk.Frame(self.avoid_hashtag_display_frame, bg=self.SECONDARY_BG)
+            placeholder_frame.pack(fill=tk.X, pady=(16, 8))
+            
+            placeholder = tk.Label(
+                placeholder_frame,
+                text="No avoid hashtags added yet",
+                bg=self.SECONDARY_BG,
+                fg=self.TEXT_COLOR,  # Better contrast
+                font=("SF Pro Display", 13) if self.is_macos() else ("Segoe UI", 11),  # Increased size
+                pady=12
+            )
+            placeholder.pack()
+            return
+            
+        # Responsive hashtag container using grid
+        hashtag_container = tk.Frame(self.avoid_hashtag_display_frame, bg=self.SECONDARY_BG)
+        hashtag_container.pack(fill=tk.BOTH, expand=True, pady=(16, 8))
+        max_cols = 3  # Number of pills per row before wrapping
+        for i, hashtag in enumerate(self.avoid_hashtags_list):
+            pill_frame = tk.Frame(
+                hashtag_container,
+                bg=self.INPUT_BG,
+                relief="flat",
+                bd=0,
+                highlightbackground=self.BORDER_COLOR,
+                highlightthickness=1
+            )
+            pill_frame.grid(row=i // max_cols, column=i % max_cols, padx=6, pady=4, sticky="w")
+            hashtag_label = tk.Label(
+                pill_frame,
+                text=f"#{hashtag}",
+                bg=self.INPUT_BG,
+                fg=self.TEXT_COLOR,
+                font=("SF Pro Display", 12) if self.is_macos() else ("Segoe UI", 11),
+                padx=10,
+                pady=6,
+                wraplength=120,  # Prevents overflow, wraps long hashtags
+                anchor="w"
+            )
+            hashtag_label.pack(side=tk.LEFT)
+            remove_btn = tk.Label(
+                pill_frame,
+                text="×",
+                bg=self.INPUT_BG,
+                fg=self.SECONDARY_TEXT,
+                font=("SF Pro Display", 16) if self.is_macos() else ("Segoe UI", 14),
+                padx=8,
+                pady=6
+            )
+            remove_btn.pack(side=tk.RIGHT)
+            remove_btn.bind("<Button-1>", lambda e, h=hashtag: self.remove_avoid_hashtag(h))
+            def create_hover_effects(pill, label, btn, hashtag_text):
+                def on_enter(e):
+                    pill.configure(bg=self.BORDER_COLOR)
+                    label.configure(bg=self.BORDER_COLOR)
+                    btn.configure(bg=self.BORDER_COLOR, fg=self.ERROR_COLOR)
+                def on_leave(e):
+                    pill.configure(bg=self.INPUT_BG)
+                    label.configure(bg=self.INPUT_BG)
+                    btn.configure(bg=self.INPUT_BG, fg=self.SECONDARY_TEXT)
+                for widget in [pill, label, btn]:
+                    widget.bind("<Enter>", on_enter)
+                    widget.bind("<Leave>", on_leave)
+            create_hover_effects(pill_frame, hashtag_label, remove_btn, hashtag)
+
+    def remove_avoid_hashtag(self, hashtag):
+        """Remove an avoid hashtag from the list"""
+        if hashtag in self.avoid_hashtags_list:
+            self.avoid_hashtags_list.remove(hashtag)
+            self.update_avoid_hashtag_display()
+            self.status_var.set(f"Removed avoid #{hashtag}")
+            
     def create_status_bar(self):
         """Create a modern Instagram-like status bar"""
         # Top border
@@ -730,6 +969,7 @@ class InstaBotApp:
             self.password_var.set(cfg.get("instagram_password", ""))
             self.openai_var.set(cfg.get("openai_api_key", ""))
             self.hashtags_list = cfg.get("hashtags", [])
+            self.avoid_hashtags_list = cfg.get("avoid_hashtags", [])
             self.likes_var.set(str(cfg.get("likes_per_day", 50)))
             self.comments_var.set(str(cfg.get("comments_per_day", 15)))
             self.allow_sensitive_var.set(cfg.get("allow_sensitive", True))
@@ -741,6 +981,7 @@ class InstaBotApp:
         except Exception:
             # Set defaults if config doesn't exist or is invalid
             self.hashtags_list = []
+            self.avoid_hashtags_list = []
             self.allow_sensitive_var.set(True)
             
     def save_config(self, cfg):
@@ -760,6 +1001,7 @@ class InstaBotApp:
                 "instagram_password": self.password_var.get(),
                 "openai_api_key": self.openai_var.get(),
                 "hashtags": self.hashtags_list,
+                "avoid_hashtags": self.avoid_hashtags_list,
                 "likes_per_day": int(self.likes_var.get()) if self.likes_var.get().isdigit() else 50,
                 "comments_per_day": int(self.comments_var.get()) if self.comments_var.get().isdigit() else 15,
                 "allow_sensitive": self.allow_sensitive_var.get()
@@ -783,6 +1025,7 @@ class InstaBotApp:
                 "instagram_password": self.password_var.get(),
                 "openai_api_key": self.openai_var.get(),
                 "hashtags": self.hashtags_list,
+                "avoid_hashtags": self.avoid_hashtags_list,
                 "likes_per_day": int(self.likes_var.get()),
                 "comments_per_day": int(self.comments_var.get()),
                 "allow_sensitive": self.allow_sensitive_var.get()
@@ -815,15 +1058,17 @@ class InstaBotApp:
                         cfg['likes_per_day'],
                         cfg['comments_per_day'],
                         generate_comment,
-                        allow_sensitive=cfg['allow_sensitive']
+                        allow_sensitive=cfg['allow_sensitive'],
+                        avoid_hashtags=cfg['avoid_hashtags']
                     )
                     
                     # Update status
                     self.root.after(0, lambda: self.status_var.set("Completed! Check logs for details."))
                     messagebox.showinfo("Success", "Bot actions completed successfully!")
-                    
                 except Exception as e:
-                    self.root.after(0, lambda: self.status_var.set(f"Error: {str(e)}"))
+                    # Capture the exception value in a local variable for the lambda
+                    error_message = f"Error: {str(e)}"
+                    self.root.after(0, lambda msg=error_message: self.status_var.set(msg))
                     messagebox.showerror("Error", str(e))
             
             threading.Thread(target=bot_task, daemon=True).start()
