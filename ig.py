@@ -8,19 +8,44 @@ from db import log_action, init_db
 
 logging.basicConfig(filename='instabot.log', level=logging.INFO, format='%(asctime)s %(levelname)s:%(message)s')
 
+SESSION_FILE = "session.json"
+
 def login_instagram(username, password):
     cl = Client()
-    try:
-        cl.login(username, password)
-        return cl
-    except Exception as e:
-        # If MFA is enabled, instagrapi will prompt for verification_code
-        if "challenge_required" in str(e) or "two_factor" in str(e):
-            code = input("Enter your Instagram 2FA/MFA code: ")
-            cl.login(username, password, verification_code=code)
+    # Try to load session if it exists
+    if os.path.exists(SESSION_FILE):
+        try:
+            cl.load_settings(SESSION_FILE)
+            cl.login(username, password)  # Validate session
             return cl
-        else:
-            raise e
+        except Exception as e:
+            logging.warning(f"Session invalid, logging in again: {e}")
+            try:
+                cl.login(username, password)
+                cl.dump_settings(SESSION_FILE)
+                return cl
+            except Exception as e2:
+                # Handle 2FA/MFA
+                if "challenge_required" in str(e2) or "two_factor" in str(e2):
+                    code = input("Enter your Instagram 2FA/MFA code: ")
+                    cl.login(username, password, verification_code=code)
+                    cl.dump_settings(SESSION_FILE)
+                    return cl
+                else:
+                    raise e2
+    else:
+        try:
+            cl.login(username, password)
+            cl.dump_settings(SESSION_FILE)
+            return cl
+        except Exception as e:
+            if "challenge_required" in str(e) or "two_factor" in str(e):
+                code = input("Enter your Instagram 2FA/MFA code: ")
+                cl.login(username, password, verification_code=code)
+                cl.dump_settings(SESSION_FILE)
+                return cl
+            else:
+                raise e
 
 def has_action(media_id, action_type):
     import sqlite3

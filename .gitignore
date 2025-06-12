@@ -8,6 +8,7 @@ __pycache__/
 
 # Secrets
 config.json
+session.json
 
 # Distribution / packaging
 .Python

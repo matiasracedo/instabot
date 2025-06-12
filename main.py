@@ -252,11 +252,31 @@ class InstaBotApp:
         )
         clear_btn.pack(side=tk.RIGHT)
         
-        # Container for hashtag display
-        self.hashtag_display_frame = tk.Frame(parent, bg=self.SECONDARY_BG)
-        self.hashtag_display_frame.grid(row=start_row+1, column=0, columnspan=2, sticky="ew", pady=(8, 24))  # Add more space below hashtags
-        
-        # --- Avoid Hashtags Section ---
+        # Container for hashtag display (scrollable)
+        hashtag_scroll_frame = tk.Frame(parent, bg=self.SECONDARY_BG)
+        hashtag_scroll_frame.grid(row=start_row+1, column=0, columnspan=2, sticky="ew", pady=(8, 24))
+        hashtag_canvas = tk.Canvas(
+            hashtag_scroll_frame,
+            bg=self.SECONDARY_BG,
+            highlightthickness=0,
+            height=120  # Fixed height for scrollable area
+        )
+        hashtag_canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        hashtag_scrollbar = ttk.Scrollbar(
+            hashtag_scroll_frame,
+            orient="vertical",
+            command=hashtag_canvas.yview
+        )
+        hashtag_scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+        hashtag_canvas.configure(yscrollcommand=hashtag_scrollbar.set)
+        self.hashtag_display_frame = tk.Frame(hashtag_canvas, bg=self.SECONDARY_BG)
+        self.hashtag_display_frame.bind(
+            "<Configure>",
+            lambda e: hashtag_canvas.configure(scrollregion=hashtag_canvas.bbox("all"))
+        )
+        hashtag_canvas.create_window((0, 0), window=self.hashtag_display_frame, anchor="nw")
+
+        # --- Avoid Hashtags Section (scrollable) ---
         avoid_label = ttk.Label(
             parent,
             text="Avoid Hashtags (no comment if present)",
@@ -298,8 +318,29 @@ class InstaBotApp:
             style="Secondary.TButton"
         )
         avoid_clear_btn.pack(side=tk.RIGHT)
-        self.avoid_hashtag_display_frame = tk.Frame(parent, bg=self.SECONDARY_BG)
-        self.avoid_hashtag_display_frame.grid(row=start_row+3, column=0, columnspan=2, sticky="ew", pady=(8, 24))  # More space below avoid hashtags
+        # Scrollable avoid hashtag display
+        avoid_scroll_frame = tk.Frame(parent, bg=self.SECONDARY_BG)
+        avoid_scroll_frame.grid(row=start_row+3, column=0, columnspan=2, sticky="ew", pady=(8, 24))
+        avoid_canvas = tk.Canvas(
+            avoid_scroll_frame,
+            bg=self.SECONDARY_BG,
+            highlightthickness=0,
+            height=90  # Fixed height for scrollable area
+        )
+        avoid_canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        avoid_scrollbar = ttk.Scrollbar(
+            avoid_scroll_frame,
+            orient="vertical",
+            command=avoid_canvas.yview
+        )
+        avoid_scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+        avoid_canvas.configure(yscrollcommand=avoid_scrollbar.set)
+        self.avoid_hashtag_display_frame = tk.Frame(avoid_canvas, bg=self.SECONDARY_BG)
+        self.avoid_hashtag_display_frame.bind(
+            "<Configure>",
+            lambda e: avoid_canvas.configure(scrollregion=avoid_canvas.bbox("all"))
+        )
+        avoid_canvas.create_window((0, 0), window=self.avoid_hashtag_display_frame, anchor="nw")
 
     def add_button_hover_effects(self, add_btn, clear_btn):
         """Add modern hover effects to buttons"""
