@@ -6,7 +6,7 @@ import random
 def set_api_key(api_key):
     openai.api_key = api_key
 
-def generate_comment(details, allow_sensitive=True):
+def generate_comment(details, allow_sensitive=True, goodreads_books=None):
     # Do not comment on own posts
     if details.get('is_own_post'):
         return None
@@ -63,6 +63,29 @@ def generate_comment(details, allow_sensitive=True):
         return None  # Signal to skip commenting
     if image_analysis:
         prompt += f"Image description: {image_analysis}\n"
+
+    # --- Goodreads personalization ---
+    if goodreads_books and caption:
+        # Try to find a book title in the caption (simple match)
+        found_book = None
+        for book in goodreads_books:
+            title = book.get('title', '').strip()
+            if title and title.lower() in caption.lower():
+                found_book = book
+                break
+        if found_book:
+            # If user has read the book, add rating/review info to prompt
+            rating = found_book.get('rating')
+            review = found_book.get('review')
+            if rating:
+                prompt += f"I have read the book '{found_book['title']}' and gave it a {rating}/5 rating on Goodreads. "
+            if review:
+                prompt += f"My review: {review[:200]}\n"  # Limit review length
+            prompt += "If this post is a review of the book, make my comment more personal, reflecting that I have read it. Do not mention my actual rating in the comment.\n"
+        else:
+            # If not read, instruct not to give a false opinion
+            prompt += "If this post is about a book I have not read, do not give a personal opinion about the book.\n"
+
     prompt += "Comment:"
     response = openai.chat.completions.create(
         model="gpt-4o",

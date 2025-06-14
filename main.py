@@ -7,6 +7,7 @@ from ig import login_instagram, like_and_comment
 from openai_client import set_api_key, generate_comment
 from db import init_db, get_stats, log_action
 from stats import create_stats_window
+from goodreads import get_goodreads_books
 import threading
 
 CONFIG_FILE = "config.json"
@@ -36,6 +37,7 @@ class InstaBotApp:
         self.comments_var = tk.StringVar(value="15")
         self.allow_sensitive_var = tk.BooleanVar(value=True)
         self.status_var = tk.StringVar(value="Ready")
+        self.goodreads_user_id_var = tk.StringVar()  # Optional Goodreads user ID
         
         # Load existing config if available
         self.load_config_to_ui()
@@ -596,6 +598,7 @@ class InstaBotApp:
             ("Instagram Username", self.username_var, False),
             ("Instagram Password", self.password_var, True),
             ("OpenAI API Key", self.openai_var, True),
+            ("Goodreads User ID (optional)", self.goodreads_user_id_var, False),
             ("Likes per day", self.likes_var, False),
             ("Comments per day", self.comments_var, False)
         ]
@@ -808,8 +811,8 @@ class InstaBotApp:
                 placeholder_frame,
                 text="No hashtags added yet",
                 bg=self.SECONDARY_BG,
-                fg=self.TEXT_COLOR,  # Better contrast
-                font=("SF Pro Display", 13) if self.is_macos() else ("Segoe UI", 11),  # Increased size
+                fg=self.TEXT_COLOR,
+                font=("SF Pro Display", 13) if self.is_macos() else ("Segoe UI", 11),
                 pady=12
             )
             placeholder.pack()
@@ -881,8 +884,8 @@ class InstaBotApp:
                 placeholder_frame,
                 text="No avoid hashtags added yet",
                 bg=self.SECONDARY_BG,
-                fg=self.TEXT_COLOR,  # Better contrast
-                font=("SF Pro Display", 13) if self.is_macos() else ("Segoe UI", 11),  # Increased size
+                fg=self.TEXT_COLOR,
+                font=("SF Pro Display", 13) if self.is_macos() else ("Segoe UI", 11),
                 pady=12
             )
             placeholder.pack()
@@ -1009,6 +1012,7 @@ class InstaBotApp:
             self.username_var.set(cfg.get("instagram_username", ""))
             self.password_var.set(cfg.get("instagram_password", ""))
             self.openai_var.set(cfg.get("openai_api_key", ""))
+            self.goodreads_user_id_var.set(cfg.get("goodreads_user_id", ""))
             self.hashtags_list = cfg.get("hashtags", [])
             self.avoid_hashtags_list = cfg.get("avoid_hashtags", [])
             self.likes_var.set(str(cfg.get("likes_per_day", 50)))
@@ -1041,6 +1045,7 @@ class InstaBotApp:
                 "instagram_username": self.username_var.get(),
                 "instagram_password": self.password_var.get(),
                 "openai_api_key": self.openai_var.get(),
+                "goodreads_user_id": self.goodreads_user_id_var.get(),
                 "hashtags": self.hashtags_list,
                 "avoid_hashtags": self.avoid_hashtags_list,
                 "likes_per_day": int(self.likes_var.get()) if self.likes_var.get().isdigit() else 50,
@@ -1059,7 +1064,6 @@ class InstaBotApp:
             if not self.hashtags_list:
                 messagebox.showerror("Error", "Please add at least one hashtag before running the bot!")
                 return
-                
             # Get current config
             cfg = {
                 "instagram_username": self.username_var.get(),
@@ -1069,53 +1073,52 @@ class InstaBotApp:
                 "avoid_hashtags": self.avoid_hashtags_list,
                 "likes_per_day": int(self.likes_var.get()),
                 "comments_per_day": int(self.comments_var.get()),
-                "allow_sensitive": self.allow_sensitive_var.get()
+                "allow_sensitive": self.allow_sensitive_var.get(),
+                "goodreads_user_id": self.goodreads_user_id_var.get(),
             }
-            
-            # Save before running
             self.save_config(cfg)
-            
-            # Setup OpenAI
-            set_api_key(cfg['openai_api_key'])
-            
-            # Update status
-            self.status_var.set("Logging in to Instagram...")
-            self.root.update()
-            
-            # Login to Instagram
-            cl = login_instagram(cfg['instagram_username'], cfg['instagram_password'])
-            
-            # Update status
-            self.status_var.set("Running bot actions...")
-            self.root.update()
-            
-            # Run the bot in a background thread
-            def bot_task():
+            # Goodreads integration: scrape if user_id is provided, in background
+            goodreads_books = []
+            user_id = self.goodreads_user_id_var.get().strip()
+            def run_bot_with_goodreads(goodreads_books):
                 try:
-                    # Run the bot
+                    set_api_key(cfg['openai_api_key'])
+                    self.status_var.set("Logging in to Instagram...")
+                    self.root.update()
+                    cl = login_instagram(cfg['instagram_username'], cfg['instagram_password'])
+                    self.status_var.set("Running bot actions...")
+                    self.root.update()
                     like_and_comment(
                         cl,
                         cfg['hashtags'],
                         cfg['likes_per_day'],
                         cfg['comments_per_day'],
-                        generate_comment,
+                        lambda details, allow_sensitive=True: generate_comment(details, allow_sensitive=allow_sensitive, goodreads_books=goodreads_books),
                         allow_sensitive=cfg['allow_sensitive'],
                         avoid_hashtags=cfg['avoid_hashtags']
                     )
-                    
-                    # Update status
                     self.root.after(0, lambda: self.status_var.set("Completed! Check logs for details."))
                     messagebox.showinfo("Success", "Bot actions completed successfully!")
                 except Exception as e:
-                    # Capture the exception value in a local variable for the lambda
-                    error_message = f"Error: {str(e)}"
+                    import traceback
+                    error_message = f"Error: {str(e)}\n{traceback.format_exc()}"
                     self.root.after(0, lambda msg=error_message: self.status_var.set(msg))
                     messagebox.showerror("Error", str(e))
-            
-            threading.Thread(target=bot_task, daemon=True).start()
-            
+            def scrape_goodreads_and_run():
+                nonlocal goodreads_books
+                if user_id:
+                    self.status_var.set("Scraping Goodreads data...")
+                    self.root.update()
+                    try:
+                        goodreads_books = get_goodreads_books(user_id) or []
+                    except Exception as e:
+                        goodreads_books = []
+                        print(f"[WARNING] Goodreads scraping failed: {e}")
+                run_bot_with_goodreads(goodreads_books)
+            threading.Thread(target=scrape_goodreads_and_run, daemon=True).start()
         except Exception as e:
-            self.status_var.set(f"Error: {str(e)}")
+            import traceback
+            self.status_var.set(f"Error: {str(e)}\n{traceback.format_exc()}")
             messagebox.showerror("Error", str(e))
             
     def show_stats(self):
